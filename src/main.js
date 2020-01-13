@@ -57,6 +57,10 @@ const schema = {
   fakeDns: {
     type: 'boolean',
     default: false
+  },
+  systemDns: {
+    type: 'string',
+    default: '223.5.5.5,1.1.1.1'
   }
 }
 const store = new Store({name: 'preference', schema: schema})
@@ -399,7 +403,7 @@ async function startCore(callback) {
         '-tunAddr', tunAddr,
         '-tunMask', tunMask,
         '-tunGw', tunGw,
-        '-tunDns', '223.5.5.5,1.1.1.1',
+        '-tunDns', store.get('systemDns'),
         '-rpcPort', coreRpcPort.toString(),
         '-sendThrough', sendThrough,
         '-proxyType', 'v2ray',
@@ -860,7 +864,7 @@ function checkForUpdates(silent) {
       latestVer = semver.clean(obj['tag_name'])
       ver = app.getVersion()
       if (ver != latestVer) {
-        dialog.showMessageBox({ message: util.format('A new version (%s) is available.\n\nRelease Notes:\n%s\n\nDownload: %s', latestVer, obj['body'], obj['html_url']) })
+        dialog.showMessageBox({ message: util.format('A new version (%s) is available.\n\n\nRelease Notes:\n\n%s\n\n\nDownload:\n\n%s', latestVer, obj['body'], obj['html_url']) })
       } else {
         if (!silent) {
           dialog.showMessageBox({ message: 'You are up-to-date!' })
@@ -1102,6 +1106,27 @@ function buildTrayMenu() {
         type: 'submenu',
         submenu: Menu.buildFromTemplate([
           {
+            label: 'Set System DNS',
+            type: 'normal',
+            click: (item) => {
+              prompt({
+                title: 'Set System DNS Resolvers',
+                label: 'Comma-separated list:',
+                value: store.get('systemDns'),
+                inputAttrs: {
+                    type: 'text'
+                }
+              })
+              .then((r) => {
+                if (r) {
+                  // remove all whitespaces before store
+                  store.set('systemDns', r.replace(/\s/g,''))
+                }
+              })
+            },
+            visible: process.platform == 'win32'
+          },
+          {
             label: 'Domain Sniffing',
             type: 'checkbox',
             click: (item) => { store.set('sniffing', item.checked) },
@@ -1148,6 +1173,10 @@ function buildTrayMenu() {
   { type: 'separator' },
   { label: 'Check For Updates', type: 'normal', click: function() {
       checkForUpdates(false)
+    }
+  },
+  { label: 'Help', type: 'normal', click: function() {
+      shell.openExternal('https://github.com/mellow-io/mellow')
     }
   },
   { label: 'About', type: 'normal', click: function() {

@@ -12,7 +12,7 @@ https://github.com/mellow-io/mellow/releases
 ```ini
 [Endpoint]
 MyProxyServer, ss, ss://aes-128-gcm:pass@192.168.100.1:8888
-Dns-Out, dns
+Dns-Out, builtin, dns
 
 [RoutingRule]
 FINAL, MyProxyServer
@@ -33,7 +33,7 @@ hijack = Dns-Out
 [Endpoint]
 MyProxyServer, ss, ss://aes-128-gcm:pass@192.168.100.1:8888
 Direct, builtin, freedom, domainStrategy=UseIP
-Dns-Out, dns
+Dns-Out, builtin, dns
 
 [RoutingRule]
 DOMAIN-KEYWORD, geosite:cn, Direct
@@ -168,7 +168,7 @@ Windows 客户端在每次启动时都会弹框请求管理权限，如果不希
 ### 关于 DNS
 因为系统 DNS 很不好控制，推荐 Freedom Outbound 使用 UseIP 策略，再配置好内建 DNS 服务器，这样可以避免一些奇怪问题，也增加 DNS 缓存的利用效率。
 
-macOS 和 Linux 用户可能需要检查下系统 DNS 配置，勿用路由器网关地址或私有地址作 DNS，因为那样流量就不会被路由到 TUN 接口，从而完全摆脱了 Mellow 控制，然后会导致一些 DNS 解析异常以及导致 DNS 分流完全失效。
+**macOS 和 Linux 用户可能需要检查下系统 DNS 配置，勿用路由器网关地址或私有地址作 DNS**，因为那样流量就不会被路由到 TUN 接口，从而完全摆脱了 Mellow 控制，然后会导致一些 DNS 解析异常以及导致 DNS 分流完全失效。
 
 DNS 的处理方面基本上和 [这篇文章](https://medium.com/@TachyonDevel/%E6%BC%AB%E8%B0%88%E5%90%84%E7%A7%8D%E9%BB%91%E7%A7%91%E6%8A%80%E5%BC%8F-dns-%E6%8A%80%E6%9C%AF%E5%9C%A8%E4%BB%A3%E7%90%86%E7%8E%AF%E5%A2%83%E4%B8%AD%E7%9A%84%E5%BA%94%E7%94%A8-62c50e58cbd0) 中介绍的没什么出入，默认使用 Sniffing 来处理 DNS 染污，建议再配置一下 DNS 分流，就是 conf 配置中的 DNS Hijack + DNS Outbound（Endpoint） + DNS Server + DNS Rule。
 
@@ -260,10 +260,16 @@ local process -> ROUTING -> tun1 -> tun2socks (Mellow) -> ROUTING -> pppoe-wan
 ssh -NL 6002:localhost:6001 root@192.168.1.1
 ```
 
+### 如何配合其它代理软件使用？
+
+参考 https://github.com/mellow-io/mellow/issues/3 和 https://github.com/mellow-io/mellow/issues/52
+
+总的来说，需要处理好两点，一是把相应的代理软件流量用 PROCESS-NAME 规则排除掉，二是（有必要的话）对用到伪装域名的代理协议做额外处理。
+
 ## JSON 配置的扩展功能说明
 
 ### 自动选择最优线路
-就是 conf 配置中的 Endpoint Group 使用 latency 作策略，可根据代理请求的 RTT，自动选择负载均衡组中最优线路来转发请求。
+就是 conf 配置中的 Endpoint Group 使用 latency 作策略，可根据代理请求的 RTT（即实际向 outbound 发送一个代理请求，记录返回非空数据所使用的时间），自动选择负载均衡组中最优线路来转发请求。
 
 ```json
 "routing": {
@@ -275,13 +281,13 @@ ssh -NL 6002:localhost:6001 root@192.168.1.1
                 "server_2"
             ],
             "strategy": "latency",
-            "totalMeasures": 2,
-            "interval": 300,
-            "delay": 1,
-            "timeout": 6,
-            "tolerance": 300,
-            "probeTarget": "tls:www.google.com:443",
-            "probeContent": "HEAD / HTTP/1.1\r\n\r\n"
+            "interval": 60, // 秒，每次测速之间的最少时间间隔
+            "totalMeasures": 2, // 每次测速中对每个 outbound 所做的请求次数
+            "delay": 1, // 秒，每个测速请求之间的时间间隔
+            "timeout": 6, // 秒，测速请求的超时时间
+            "tolerance": 300, // 毫秒，可接受的延迟波动范围，切换最佳节点会将此波动范围考虑进去
+            "probeTarget": "tls:www.google.com:443", // 测速请求发送的目的地
+            "probeContent": "HEAD / HTTP/1.1\r\n\r\n" // 测速请求内容
         }
     ]
 }
